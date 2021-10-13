@@ -11,8 +11,9 @@ where
 import Control.Monad
 import GHC.Hs
 import GHC.Types.SrcLoc
+import Data.List (partition)
 import Ormolu.Config
-import Ormolu.Imports (normalizeImports)
+import Ormolu.Imports
 import Ormolu.Parser.CommentStream
 import Ormolu.Parser.Pragma
 import Ormolu.Printer.Combinators
@@ -67,9 +68,23 @@ p_hsModule mstackHeader pragmas HsModule {..} = do
         newline
     newline
     preserveGroups <- getPrinterOpt poRespectful
-    forM_ (normalizeImports preserveGroups hsmodImports) $ \importGroup -> do
-      forM_ importGroup (located' p_hsmodImport)
-      newline
+    alignModuleNames <- getPrinterOpt poAlignModuleNames
+    splitImport <- getPrinterOpt poGroupQualifiedImports
+    unifyModuleNameWidth <- getPrinterOpt poPadImportModuleNamesWidth
+    forM_ (normalizeImports preserveGroups hsmodImports) $
+      \(ImportGroup colWidth prefixQualified importGroup) -> do
+        let (unqualified, qualified) = partition (not . isQualified) importGroup
+            alignModules = alignModuleNames && prefixQualified
+            modules =
+              if splitImport
+                then unqualified ++ qualified
+                else importGroup
+            width =
+              if unifyModuleNameWidth
+                then colWidth
+                else 0
+        forM_ modules (located' (p_hsmodImport width alignModules))
+        newline
     declNewline
     switchLayout (getLoc <$> hsmodDecls) $ do
       preserveSpacing <- getPrinterOpt poRespectful

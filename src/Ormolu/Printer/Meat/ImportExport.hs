@@ -11,12 +11,15 @@ module Ormolu.Printer.Meat.ImportExport
 where
 
 import Control.Monad
+import Data.Maybe (isJust)
 import qualified Data.Text as T
 import GHC.Hs.Extension
 import GHC.Hs.ImpExp
 import GHC.LanguageExtensions.Type
 import GHC.Types.SrcLoc
 import GHC.Unit.Types
+import GHC.Unit.Module.Name
+import GHC.Data.FastString
 import Ormolu.Config (poDiffFriendlyImportExport)
 import Ormolu.Printer.Combinators
 import Ormolu.Printer.Meat.Common
@@ -35,25 +38,29 @@ p_hsmodExports xs =
       (\(p, l) -> sitcc (located l (p_lie layout p)))
       (attachRelativePos xs)
 
-p_hsmodImport :: ImportDecl GhcPs -> R ()
-p_hsmodImport ImportDecl {..} = do
+p_hsmodImport :: Int -> Bool -> ImportDecl GhcPs -> R ()
+p_hsmodImport moduleWidth prefixQualified ImportDecl{..} = do
   useQualifiedPost <- isExtensionEnabled ImportQualifiedPost
   txt "import"
   space
+  let spaces n = forM_ [1 .. n :: Int] (const $ txt " ")
   when (ideclSource == IsBoot) (txt "{-# SOURCE #-}")
   space
   when ideclSafe (txt "safe")
   space
-  when
-    (isImportDeclQualified ideclQualified && not useQualifiedPost)
-    (txt "qualified")
+  if (isImportDeclQualified ideclQualified && not useQualifiedPost)
+    then (txt "qualified")
+    else when (prefixQualified && not useQualifiedPost) (spaces 9)
   space
   case ideclPkgQual of
     Nothing -> return ()
     Just slit -> atom slit
   space
   inci $ do
+    let len = lengthFS . moduleNameFS $ unLoc ideclName
     located ideclName atom
+    when (isJust ideclAs || isJust ideclHiding) $
+      spaces (moduleWidth - len)
     when
       (isImportDeclQualified ideclQualified && useQualifiedPost)
       (space >> txt "qualified")

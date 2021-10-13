@@ -5,6 +5,8 @@
 -- | Manipulations on import lists.
 module Ormolu.Imports
   ( normalizeImports,
+    ImportGroup (..),
+    isQualified,
   )
 where
 
@@ -15,7 +17,7 @@ import Data.Function (on)
 import Data.List (foldl', nubBy, sortBy, sortOn)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import GHC.Data.FastString (FastString)
+import GHC.Data.FastString (FastString, lengthFS)
 import GHC.Hs.Extension
 import GHC.Hs.ImpExp as GHC
 import GHC.Types.Basic
@@ -25,11 +27,17 @@ import GHC.Unit.Module.Name
 import GHC.Unit.Types
 import Ormolu.Utils (groupBy', notImplemented, separatedByBlank, showOutputable)
 
+data ImportGroup = ImportGroup
+  { longestModuleLength :: Int,
+    hasPrefixQualified :: Bool,
+    importGroup :: [LImportDecl GhcPs]
+  }
+
 -- | Sort, group and normalize imports. Assumes input list is sorted by source location.
-normalizeImports :: Bool -> [LImportDecl GhcPs] -> [[LImportDecl GhcPs]]
+normalizeImports :: Bool -> [LImportDecl GhcPs] -> [ImportGroup]
 normalizeImports preserveGroups =
   map
-    ( fmap snd
+    ( foldr (mkGroup . snd) (ImportGroup 0 False [])
         . M.toAscList
         . M.fromListWith combineImports
         . fmap (\x -> (importId x, g x))
@@ -38,6 +46,14 @@ normalizeImports preserveGroups =
       then map toList . groupBy' (\x y -> not $ separatedByBlank getLoc x y)
       else pure
   where
+    specialImport decl = ideclSafe decl || (ideclSource decl == IsBoot)
+    mkGroup decl@(L _ ImportDecl {..}) (ImportGroup n prefixed imports)
+      | specialImport (unLoc decl) = ImportGroup n prefixed (decl : imports)
+      | otherwise =
+        let nameLen = lengthFS . moduleNameFS $ unLoc ideclName
+            qualified = ideclQualified == QualifiedPre
+         in ImportGroup (max n nameLen) (prefixed || qualified) (decl : imports)
+
     g (L l ImportDecl {..}) =
       L
         l
@@ -81,17 +97,14 @@ data ImportId = ImportId
 
 -- | Obtain an 'ImportId' for a given import.
 importId :: LImportDecl GhcPs -> ImportId
-importId (L _ ImportDecl {..}) =
+importId decl@(L _ ImportDecl {..}) =
   ImportId
     { importIsPrelude = isPrelude,
       importIdName = moduleName,
       importPkgQual = sl_fs <$> ideclPkgQual,
       importSource = ideclSource,
       importSafe = ideclSafe,
-      importQualified = case ideclQualified of
-        QualifiedPre -> True
-        QualifiedPost -> True
-        NotQualified -> False,
+      importQualified = isQualified decl,
       importImplicit = ideclImplicit,
       importAs = unLoc <$> ideclAs,
       importHiding = fst <$> ideclHiding
@@ -99,6 +112,12 @@ importId (L _ ImportDecl {..}) =
   where
     isPrelude = moduleNameString moduleName == "Prelude"
     moduleName = unLoc ideclName
+
+isQualified :: LImportDecl GhcPs -> Bool
+isQualified (L _ ImportDecl {..}) = case ideclQualified of
+  QualifiedPre -> True
+  QualifiedPost -> True
+  NotQualified -> False
 
 -- | Normalize a collection of import\/export items.
 normalizeLies :: [LIE GhcPs] -> [LIE GhcPs]

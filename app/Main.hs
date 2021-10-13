@@ -347,6 +347,30 @@ printerOptsParser = do
           "Number of spaces between top-level declarations"
             <> showDefaultValue poNewlinesBetweenDecls
       ]
+  poAlignModuleNames <-
+    (optional . option parseBoundedEnum . mconcat)
+      [ long "align-module-names",
+        metavar "BOOL",
+        help $
+          "Align module names in imports"
+            <> showDefaultValue poAlignModuleNames
+      ]
+  poGroupQualifiedImports <-
+    (optional . option parseBoundedEnum . mconcat)
+      [ long "group-qualified-imports",
+        metavar "BOOL",
+        help $
+          "Group qualified imports together"
+            <> showDefaultValue poGroupQualifiedImports
+      ]
+  poPadImportModuleNamesWidth <-
+    (optional . option parseBoundedEnum . mconcat)
+      [ long "pad-import-module-name-width",
+        metavar "BOOL",
+        help $
+          "Pad module names in imports to the same width"
+            <> showDefaultValue poPadImportModuleNamesWidth
+      ]
   pure PrinterOpts {..}
 
 ----------------------------------------------------------------------------

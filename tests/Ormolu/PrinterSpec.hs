@@ -27,7 +27,10 @@ spec = do
             poDiffFriendlyImportExport = pure False,
             poRespectful = pure False,
             poHaddockStyle = pure HaddockSingleLine,
-            poNewlinesBetweenDecls = pure 1
+            poNewlinesBetweenDecls = pure 1,
+            poAlignModuleNames = pure False,
+            poGroupQualifiedImports = pure False,
+            poPadImportModuleNamesWidth = pure False
           }
   sequence_ $ checkExample <$> [(ormoluOpts, "ormolu", ""), (defaultPrinterOpts, "fourmolu", "-four")] <*> es
 
